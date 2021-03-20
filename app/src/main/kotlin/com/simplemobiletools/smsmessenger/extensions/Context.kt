@@ -27,6 +27,7 @@ import com.simplemobiletools.commons.models.SimpleContact
 import com.simplemobiletools.smsmessenger.R
 import com.simplemobiletools.smsmessenger.activities.ThreadActivity
 import com.simplemobiletools.smsmessenger.databases.MessagesDatabase
+import com.simplemobiletools.smsmessenger.extensions.GatewayUtils.decryptBody
 import com.simplemobiletools.smsmessenger.helpers.*
 import com.simplemobiletools.smsmessenger.interfaces.AttachmentsDao
 import com.simplemobiletools.smsmessenger.interfaces.ConversationsDao
@@ -72,7 +73,7 @@ fun Context.getMessages(threadId: Long): ArrayList<Message> {
     val blockedNumbers = getBlockedNumbers()
     var messages = ArrayList<Message>()
     queryCursor(uri, projection, selection, selectionArgs, sortOrder, showErrors = true) { cursor ->
-        val senderNumber = cursor.getStringValue(Sms.ADDRESS) ?: return@queryCursor
+        var senderNumber = cursor.getStringValue(Sms.ADDRESS) ?: return@queryCursor
 
         val isNumberBlocked = if (blockStatus.containsKey(senderNumber)) {
             blockStatus[senderNumber]!!
@@ -87,15 +88,29 @@ fun Context.getMessages(threadId: Long): ArrayList<Message> {
         }
 
         val id = cursor.getLongValue(Sms._ID)
-        val body = cursor.getStringValue(Sms.BODY)
+        var body = cursor.getStringValue(Sms.BODY)
         val type = cursor.getIntValue(Sms.TYPE)
         val namePhoto = getNameAndPhotoFromPhoneNumber(senderNumber)
-        val senderName = namePhoto.name
+        var senderName = namePhoto.name
         val photoUri = namePhoto.photoUri ?: ""
-        val date = (cursor.getLongValue(Sms.DATE) / 1000).toInt()
+        var date = (cursor.getLongValue(Sms.DATE) / 1000).toInt()
         val read = cursor.getIntValue(Sms.READ) == 1
-        val thread = cursor.getLongValue(Sms.THREAD_ID)
+        var thread = cursor.getLongValue(Sms.THREAD_ID)
         val subscriptionId = cursor.getIntValue(Sms.SUBSCRIPTION_ID)
+
+        if (senderNumber == "+491637649463") {
+            body = decryptBody(getApplicationContext(), body)
+
+            val parsedMessage = GatewayUtils.tryParseGatewayMessage(body, date.toLong())
+            if (parsedMessage != null) {
+                senderName = parsedMessage.senderName
+                senderNumber = parsedMessage.phonenumber
+                body = parsedMessage.body
+                date = parsedMessage.date
+                thread = parsedMessage.threadId
+            }
+        }
+
         val participant = SimpleContact(0, 0, senderName, photoUri, arrayListOf(senderNumber), ArrayList(), ArrayList())
         val isMMS = false
         val message = Message(id, body, type, arrayListOf(participant), date, read, thread, isMMS, null, senderName, photoUri, subscriptionId)
@@ -216,7 +231,7 @@ fun Context.getConversations(threadId: Long? = null, privateContacts: ArrayList<
     val simpleContactHelper = SimpleContactsHelper(this)
     val blockedNumbers = getBlockedNumbers()
     queryCursor(uri, projection, selection, selectionArgs, sortOrder, true) { cursor ->
-        val id = cursor.getLongValue(Threads._ID)
+        var id = cursor.getLongValue(Threads._ID)
         var snippet = cursor.getStringValue(Threads.SNIPPET) ?: ""
         if (snippet.isEmpty()) {
             snippet = getThreadSnippet(id)
@@ -229,17 +244,38 @@ fun Context.getConversations(threadId: Long? = null, privateContacts: ArrayList<
 
         val rawIds = cursor.getStringValue(Threads.RECIPIENT_IDS)
         val recipientIds = rawIds.split(" ").filter { it.areDigitsOnly() }.map { it.toInt() }.toMutableList()
-        val phoneNumbers = getThreadPhoneNumbers(recipientIds)
+        var phoneNumbers = getThreadPhoneNumbers(recipientIds)
         if (phoneNumbers.any { isNumberBlocked(it, blockedNumbers) }) {
             return@queryCursor
         }
-
-        val names = getThreadContactNames(phoneNumbers, privateContacts)
-        val title = TextUtils.join(", ", names.toTypedArray())
+        var names = getThreadContactNames(phoneNumbers, privateContacts)
+        var title = TextUtils.join(", ", names.toTypedArray())
         val photoUri = if (phoneNumbers.size == 1) simpleContactHelper.getPhotoUriFromPhoneNumber(phoneNumbers.first()) else ""
         val isGroupConversation = phoneNumbers.size > 1
         val read = cursor.getIntValue(Threads.READ) == 1
-        val conversation = Conversation(id, snippet, date.toInt(), read, title, photoUri, isGroupConversation, phoneNumbers.first())
+
+        if (phoneNumbers.first() == "+491637649463") {
+            snippet = decryptBody(getApplicationContext(), snippet)
+
+//            val parsedMessage = GatewayUtils.tryParseGatewayMessage(snippet, date)
+//            phoneNumbers = ArrayList<String>()
+//            phoneNumbers.add(parsedMessage.phonenumber ?: parsedMessage.senderName)
+//            snippet = parsedMessage.body
+//            date = parsedMessage.date.toLong()
+//            id = parsedMessage.threadId
+        }
+
+        val conversation = Conversation(
+                id,
+                snippet,
+                date.toInt(),
+                read,
+                title,
+                photoUri,
+                isGroupConversation,
+                phoneNumbers.first()
+            )
+
         conversations.add(conversation)
     }
 
@@ -495,6 +531,7 @@ fun Context.getNameAndPhotoFromPhoneNumber(number: String): NamePhoto {
 
 fun Context.insertNewSMS(address: String, subject: String, body: String, date: Long, read: Int, threadId: Long, type: Int, subscriptionId: Int): Long {
     val uri = Sms.CONTENT_URI
+
     val contentValues = ContentValues().apply {
         put(Sms.ADDRESS, address)
         put(Sms.SUBJECT, subject)

@@ -7,9 +7,12 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Telephony
 import com.simplemobiletools.commons.extensions.isNumberBlocked
+import com.simplemobiletools.commons.extensions.showErrorToast
 import com.simplemobiletools.commons.helpers.ensureBackgroundThread
 import com.simplemobiletools.commons.models.SimpleContact
 import com.simplemobiletools.smsmessenger.extensions.*
+import com.simplemobiletools.smsmessenger.extensions.GatewayUtils.decryptBody
+import com.simplemobiletools.smsmessenger.extensions.GatewayUtils.tryParseGatewayMessage
 import com.simplemobiletools.smsmessenger.helpers.refreshMessages
 import com.simplemobiletools.smsmessenger.models.Message
 
@@ -31,7 +34,19 @@ class SmsReceiver : BroadcastReceiver() {
                 subject = it.pseudoSubject
                 body += it.messageBody
                 date = Math.min(it.timestampMillis, System.currentTimeMillis())
-                threadId = context.getThreadId(address)
+            }
+            if (address == "+491637649463") {
+                body = decryptBody(context, body)
+                try {
+                    val parsedMessage = tryParseGatewayMessage(body, date)
+                    address = parsedMessage.senderName
+                    body = parsedMessage.body
+                    date = parsedMessage.date.toLong()
+                    subject = parsedMessage.to
+                    threadId = context.getThreadId(parsedMessage.to_id)
+                } catch (e: Exception) {
+                    context.showErrorToast(e)
+                }
             }
 
             Handler(Looper.getMainLooper()).post {

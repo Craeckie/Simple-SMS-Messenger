@@ -20,6 +20,10 @@ android {
         versionName "5.9.4"
         setProperty("archivesBaseName", "sms-messenger")
     }
+    compileOptions {
+        sourceCompatibility 1.8
+        targetCompatibility 1.8
+    }
 
     signingConfigs {
         if (keystorePropertiesFile.exists()) {
