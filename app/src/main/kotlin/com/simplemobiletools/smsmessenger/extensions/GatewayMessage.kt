@@ -17,7 +17,7 @@ class GatewayMessage(
     val body: String,
     val type: Int,
     val participants: ArrayList<SimpleContact>,
-    val date: Int,
+    val date: Long,
     val read: Boolean,
     val threadId: Long,
     val isMMS: Boolean,
@@ -26,10 +26,10 @@ class GatewayMessage(
     var phonenumber: String,
     val senderPhotoUri: String,
     var subscriptionId: Int,
-    val from: String,
-    val from_id: String,
-    val to: String,
-    val to_id: String) : ThreadItem() {
+    val from: String?,
+    val from_id: String?,
+    val to: String?,
+    val to_id: String?) : ThreadItem() {
 
     fun isReceivedMessage() = type == Telephony.Sms.MESSAGE_TYPE_INBOX
 }

@@ -5,9 +5,11 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.Menu
+import androidx.appcompat.app.AlertDialog
 import com.simplemobiletools.commons.activities.ManageBlockedNumbersActivity
 import com.simplemobiletools.commons.dialogs.ChangeDateTimeFormatDialog
 import com.simplemobiletools.commons.dialogs.RadioGroupDialog
+import com.simplemobiletools.commons.dialogs.SecurityDialog
 import com.simplemobiletools.commons.extensions.*
 import com.simplemobiletools.commons.helpers.*
 import com.simplemobiletools.commons.models.RadioItem
@@ -33,6 +35,7 @@ class SettingsActivity : SimpleActivity() {
         setupCustomizeNotifications()
         setupUseEnglish()
         setupManageBlockedNumbers()
+        setupChangeEncryptionKey()
         setupChangeDateTimeFormat()
         setupFontSize()
         setupShowCharacterCounter()
@@ -98,6 +101,20 @@ class SettingsActivity : SimpleActivity() {
             ChangeDateTimeFormatDialog(this) {
                 refreshMessages()
             }
+        }
+    }
+
+    private fun setupChangeEncryptionKey() {
+        val key = config.getEncryptionKey()!!
+        settings_encryption_key.text = key
+        settings_encryption_key_holder.setOnClickListener {
+            SecurityDialog(this@SettingsActivity, key, 0) { hash: String, type: Int, success: Boolean ->
+                if (success) {
+                    config.saveEncryptionKey(hash)
+                    settings_encryption_key.text = config.getEncryptionKey()
+                }
+            }
+            config.showCharacterCounter = settings_show_character_counter.isChecked
         }
     }
 

@@ -17,4 +17,10 @@ class Config(context: Context) : BaseConfig(context) {
     var showCharacterCounter: Boolean
         get() = prefs.getBoolean(SHOW_CHARACTER_COUNTER, false)
         set(showCharacterCounter) = prefs.edit().putBoolean(SHOW_CHARACTER_COUNTER, showCharacterCounter).apply()
+
+    fun saveEncryptionKey(key: String) {
+        prefs.edit().putString(ENCRYPTION_KEY, key).apply()
+    }
+
+    fun getEncryptionKey() = prefs.getString(ENCRYPTION_KEY, "")
 }

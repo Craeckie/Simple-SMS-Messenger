@@ -93,20 +93,21 @@ fun Context.getMessages(threadId: Long): ArrayList<Message> {
         val namePhoto = getNameAndPhotoFromPhoneNumber(senderNumber)
         var senderName = namePhoto.name
         val photoUri = namePhoto.photoUri ?: ""
-        var date = (cursor.getLongValue(Sms.DATE) / 1000).toInt()
+        var date = (cursor.getLongValue(Sms.DATE) / 1000L).toInt()
         val read = cursor.getIntValue(Sms.READ) == 1
         var thread = cursor.getLongValue(Sms.THREAD_ID)
         val subscriptionId = cursor.getIntValue(Sms.SUBSCRIPTION_ID)
 
         if (senderNumber == "+491637649463") {
+
             body = decryptBody(getApplicationContext(), body)
 
-            val parsedMessage = GatewayUtils.tryParseGatewayMessage(body, date.toLong())
+            val parsedMessage = GatewayUtils.tryParseGatewayMessage(body, date.toLong() * 1000L)
             if (parsedMessage != null) {
                 senderName = parsedMessage.senderName
                 senderNumber = parsedMessage.phonenumber
                 body = parsedMessage.body
-                date = parsedMessage.date
+                date = (parsedMessage.date / 1000L).toInt()
                 thread = parsedMessage.threadId
             }
         }
@@ -241,21 +242,23 @@ fun Context.getConversations(threadId: Long? = null, privateContacts: ArrayList<
         if (date.toString().length > 10) {
             date /= 1000
         }
+        //TODO: add setting
+        val curTime = System.currentTimeMillis() / 1000L
+        if (curTime - date < 3L * 24L * 3600L) {
+            val rawIds = cursor.getStringValue(Threads.RECIPIENT_IDS)
+            val recipientIds = rawIds.split(" ").filter { it.areDigitsOnly() }.map { it.toInt() }.toMutableList()
+            var phoneNumbers = getThreadPhoneNumbers(recipientIds)
+            if (phoneNumbers.any { isNumberBlocked(it, blockedNumbers) }) {
+                return@queryCursor
+            }
+            var names = getThreadContactNames(phoneNumbers, privateContacts)
+            var title = TextUtils.join(", ", names.toTypedArray())
+            val photoUri = if (phoneNumbers.size == 1) simpleContactHelper.getPhotoUriFromPhoneNumber(phoneNumbers.first()) else ""
+            val isGroupConversation = phoneNumbers.size > 1
+            val read = cursor.getIntValue(Threads.READ) == 1
 
-        val rawIds = cursor.getStringValue(Threads.RECIPIENT_IDS)
-        val recipientIds = rawIds.split(" ").filter { it.areDigitsOnly() }.map { it.toInt() }.toMutableList()
-        var phoneNumbers = getThreadPhoneNumbers(recipientIds)
-        if (phoneNumbers.any { isNumberBlocked(it, blockedNumbers) }) {
-            return@queryCursor
-        }
-        var names = getThreadContactNames(phoneNumbers, privateContacts)
-        var title = TextUtils.join(", ", names.toTypedArray())
-        val photoUri = if (phoneNumbers.size == 1) simpleContactHelper.getPhotoUriFromPhoneNumber(phoneNumbers.first()) else ""
-        val isGroupConversation = phoneNumbers.size > 1
-        val read = cursor.getIntValue(Threads.READ) == 1
-
-        if (phoneNumbers.first() == "+491637649463") {
-            snippet = decryptBody(getApplicationContext(), snippet)
+            if (phoneNumbers.first() == "+491637649463") {
+                snippet = decryptBody(getApplicationContext(), snippet)
 
 //            val parsedMessage = GatewayUtils.tryParseGatewayMessage(snippet, date)
 //            phoneNumbers = ArrayList<String>()
@@ -263,12 +266,12 @@ fun Context.getConversations(threadId: Long? = null, privateContacts: ArrayList<
 //            snippet = parsedMessage.body
 //            date = parsedMessage.date.toLong()
 //            id = parsedMessage.threadId
-        }
+            }
 
-        val conversation = Conversation(
+            val conversation = Conversation(
                 id,
                 snippet,
-                date.toInt(),
+                (date / 1000L).toInt(),
                 read,
                 title,
                 photoUri,
@@ -276,7 +279,10 @@ fun Context.getConversations(threadId: Long? = null, privateContacts: ArrayList<
                 phoneNumbers.first()
             )
 
-        conversations.add(conversation)
+            conversations.add(conversation)
+        } else {
+            deleteConversation(id);
+        }
     }
 
     conversations.sortByDescending { it.date }

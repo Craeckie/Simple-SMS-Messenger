@@ -2,6 +2,7 @@ package com.simplemobiletools.smsmessenger.extensions;
 
 
 import android.content.Context;
+import android.os.Build;
 import android.preference.PreferenceManager;
 import android.provider.Telephony;
 import android.telephony.SmsMessage;
@@ -22,6 +23,8 @@ import org.json.JSONArray;
 import org.json.JSONException;
 
 import java.nio.charset.Charset;
+import java.time.Duration;
+import java.time.temporal.TemporalAmount;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -40,8 +43,6 @@ public class GatewayUtils {
     }
 
     private static Pattern namePattern = Pattern.compile("^(.+) \\(\\+?([0-9]+)\\)$");
-    private static Pattern oldNumberPattern = Pattern.compile("^(From|To): (.*) \\(([0-9+]+)\\)$");
-    private static Pattern oldFromGroupPattern = Pattern.compile("^From: (.*) \\(([0-9+]+)\\)@(.*)$");
 
     private static Pattern idPattern = Pattern.compile("^ID: ([0-9]+)$");
     private static Pattern datePattern = Pattern.compile("^Date: ([0-9]+)$");
@@ -51,10 +52,20 @@ public class GatewayUtils {
         public Charset getCharset() {
             return Charset.forName("UTF-16BE");
         }
+
+        @Override
+        public TemporalAmount getTimeToLive() {
+            return Duration.ofSeconds(3600);
+        }
     }
     private static class UTF8Validator implements StringValidator {
         public Charset getCharset() {
             return Charset.forName("UTF-8");
+        }
+
+        @Override
+        public TemporalAmount getTimeToLive() {
+            return Duration.ofSeconds(3600 * 24);
         }
     }
 
@@ -62,13 +73,13 @@ public class GatewayUtils {
     private static final StringValidator utf8Validator = new UTF8Validator();
     private static final StringValidator utf16Validator = new UTF16Validator();
     public static String decryptBody(Context context, String body) {
-        if (!body.startsWith("%8%")
-            && !body.startsWith("gAAA")) //TODO: temporarily
+        if (!body.startsWith("%8%") && !body.startsWith("%16%"))
             return body;
-        boolean isUTF8 = false;
+        boolean isUTF8 = true;
         try {
             if (key == null) {
                 String keyString = PreferenceManager.getDefaultSharedPreferences(context).getString("edit_text_preference_sms_key", null);
+                //TODO: add setting, change key
                 keyString = "Vvgp3vlwgkjoe6I57Oj5uENDkXBJx9zvPMXTqN4Z6vs=";
                 if (keyString == null)
                     return body;
@@ -77,6 +88,9 @@ public class GatewayUtils {
             if (body.startsWith("%8%")) {
                 body = body.substring("%8%".length());
                 isUTF8 = true;
+            } else { // %16%
+                body = body.substring("%16%".length());
+                isUTF8 = false;
             }
 
             Token token = Token.fromString(body);
@@ -91,13 +105,14 @@ public class GatewayUtils {
             String debug = "Exception when decrypting: " + e + "\n";
             if (isUTF8)
                 debug += "(is UTF8)\n";
-            body = debug + body;
+            Toast.makeText(context, debug, Toast.LENGTH_LONG);
+            //body = debug + body;
         } catch (Throwable throwable) {
             throwable.printStackTrace();
             String debug = "Throwable when decrypting: " + throwable.getMessage() + "\n";
             if (isUTF8)
                 debug += "(is UTF8)\n";
-            body = debug + body;
+            Toast.makeText(context, debug, Toast.LENGTH_LONG);
         }
         return body;
     }
@@ -132,21 +147,6 @@ public class GatewayUtils {
             } else if (line.startsWith("From: ")) {
                 from = line.substring("From: ".length());
                 isSent = false;
-                // TODO: temporarily support old format for messages sent to groups
-                if (phone == null && type == null) {
-                    Matcher matcherGroup = oldFromGroupPattern.matcher(line);
-                    Matcher matcherNumber = oldNumberPattern.matcher(line);
-                    if (matcherGroup.matches()) {
-                        from = matcherGroup.group(1);
-                        phone = matcherGroup.group(2);
-                        to = matcherGroup.group(3);
-                        type = "group";
-                    } else if (matcherNumber.matches()) {
-                        from = matcherNumber.group(2);
-                        phone = matcherNumber.group(3);
-                        type = "user";
-                    }
-                }
             } else if (line.startsWith("From_id: ")) {
                 from_id = line.substring("From_id: ".length());
                 isSent = false;
@@ -214,6 +214,9 @@ public class GatewayUtils {
         }
         Conversation conversation = null;
         GatewayMessage msg = null;
+        if (!identifier.equals("TG") && to_id == null) {
+            Log.w("GW", "to_id is null!");
+        }
         if (!messageBody.isEmpty() && !messageBody.equals("\n") && identifier.equals("MX")) {
 //            conversation = new Conversation(
 //                isSent ? to.hashCode() : from.hashCode(),
@@ -233,7 +236,7 @@ public class GatewayUtils {
                 messageBody,
                 isSent ? Telephony.Sms.MESSAGE_TYPE_SENT : Telephony.Sms.MESSAGE_TYPE_INBOX,
                 participants,
-                 (int) date.getTime(),
+                 date.getTime(),
                 status == MessageStatus.READ,
                 to_id == null ? from_id.hashCode() : to_id.hashCode(),
                 false,

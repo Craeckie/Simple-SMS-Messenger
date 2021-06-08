@@ -34,16 +34,19 @@ class SmsReceiver : BroadcastReceiver() {
                 subject = it.pseudoSubject
                 body += it.messageBody
                 date = Math.min(it.timestampMillis, System.currentTimeMillis())
+                threadId = context.getThreadId(address)
             }
             if (address == "+491637649463") {
                 body = decryptBody(context, body)
                 try {
                     val parsedMessage = tryParseGatewayMessage(body, date)
-                    address = parsedMessage.senderName
-                    body = parsedMessage.body
-                    date = parsedMessage.date.toLong()
-                    subject = parsedMessage.to
-                    threadId = context.getThreadId(parsedMessage.to_id)
+                    if (parsedMessage != null) {
+                        address = parsedMessage.senderName
+                        body = parsedMessage.body
+                        date = parsedMessage.date
+                        subject = parsedMessage.to ?: parsedMessage.from ?: "N/A"
+                        threadId = context.getThreadId(parsedMessage.to_id ?: parsedMessage.from_id ?: "N/A")
+                    }
                 } catch (e: Exception) {
                     context.showErrorToast(e)
                 }
@@ -62,9 +65,9 @@ class SmsReceiver : BroadcastReceiver() {
 
                         context.updateUnreadCountBadge(context.conversationsDB.getUnreadConversations())
                         val participant = SimpleContact(0, 0, address, "", arrayListOf(address), ArrayList(), ArrayList())
-                        val participants = arrayListOf(participant)
                         val messageDate = (date / 1000).toInt()
-                        val message = Message(newMessageId, body, type, participants, messageDate, false, threadId, false, null, address, "", subscriptionId)
+                        val message = Message(newMessageId, body, type, arrayListOf(participant), messageDate, false, threadId, 
+                            false, null, address, "", subscriptionId)
                         context.messagesDB.insertOrUpdate(message)
                         refreshMessages()
                     }
