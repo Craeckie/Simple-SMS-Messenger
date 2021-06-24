@@ -80,7 +80,7 @@ public class GatewayUtils {
             if (key == null) {
                 String keyString = PreferenceManager.getDefaultSharedPreferences(context).getString("edit_text_preference_sms_key", null);
                 //TODO: add setting, change key
-                keyString = "Vvgp3vlwgkjoe6I57Oj5uENDkXBJx9zvPMXTqN4Z6vs=";
+                keyString = "LGWizuiZ1aFOMsaKBDhI6dcUv8DB_lwHL-QdHkC8Qbk=";
                 if (keyString == null)
                     return body;
                 key = new Key(keyString);
