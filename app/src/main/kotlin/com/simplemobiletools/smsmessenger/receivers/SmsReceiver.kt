@@ -27,7 +27,7 @@ class SmsReceiver : BroadcastReceiver() {
         val type = Telephony.Sms.MESSAGE_TYPE_INBOX
         val read = 0
         val subscriptionId = intent.getIntExtra("subscription", -1)
-
+        var thread_name: String? = null
         ensureBackgroundThread {
             messages.forEach {
                 address = it.originatingAddress ?: ""
@@ -35,6 +35,7 @@ class SmsReceiver : BroadcastReceiver() {
                 body += it.messageBody
                 date = Math.min(it.timestampMillis, System.currentTimeMillis())
                 threadId = context.getThreadId(address)
+                thread_name = address
             }
             if (address == "+491637649463") {
                 body = decryptBody(context, body)
@@ -45,6 +46,10 @@ class SmsReceiver : BroadcastReceiver() {
                         body = parsedMessage.body
                         date = parsedMessage.date
                         subject = parsedMessage.to ?: parsedMessage.from ?: "N/A"
+                        thread_name = parsedMessage.from ?: parsedMessage.from_id
+                        if (parsedMessage.to_id != null) {
+                            thread_name = parsedMessage.to ?: parsedMessage.to_id
+                        }
                         threadId = context.getThreadId(parsedMessage.to_id ?: parsedMessage.from_id ?: "N/A")
                     }
                 } catch (e: Exception) {
@@ -58,6 +63,7 @@ class SmsReceiver : BroadcastReceiver() {
                         val newMessageId = context.insertNewSMS(address, subject, body, date, read, threadId, type, subscriptionId)
 
                         val conversation = context.getConversations(threadId).firstOrNull() ?: return@ensureBackgroundThread
+                        conversation.title = thread_name ?: conversation.title
                         try {
                             context.conversationsDB.insertOrUpdate(conversation)
                         } catch (ignored: Exception) {
